@@ -1,0 +1,73 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user in the Savana app.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "bio": { "type": "string" },
+        "lastSeen": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["online", "offline", "away"] }
+      },
+      "required": ["uid", "username", "displayName"]
+    },
+    "ChatRoom": {
+      "title": "Chat Room",
+      "description": "A group, channel or private chat room.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["private", "group", "channel"] },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "members": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "$ref": "Message" },
+        "lastActivity": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "type", "members"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message within a chat room.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "chatId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "content": { "type": "string" },
+        "replyTo": { "type": "string" },
+        "edited": { "type": "boolean" },
+        "deleted": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "reactions": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } }
+        },
+        "type": { "type": "string", "enum": ["text", "game_invite"] },
+        "gameData": { "type": "object" }
+      },
+      "required": ["id", "chatId", "senderId", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/chats/{chatId}": {
+      "schema": "ChatRoom",
+      "description": "Chat room metadata"
+    },
+    "/chats/{chatId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Message history for a room"
+    }
+  }
+}

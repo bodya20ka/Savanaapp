@@ -1,0 +1,271 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Send, Smile, Paperclip, MoreVertical, ShieldCheck, Gamepad2, Heart, ThumbsUp } from 'lucide-react';
+import { auth, db } from '@/src/lib/firebase';
+import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { Message, ChatRoom } from '@/src/types';
+import { format } from 'date-fns';
+import CheckersGame from './CheckersGame';
+
+interface ChatWindowProps {
+  roomId: string;
+}
+
+export default function ChatWindow({ roomId }: ChatWindowProps) {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [room, setRoom] = useState<ChatRoom | null>(null);
+  const [input, setInput] = useState('');
+  const [activeGameId, setActiveGameId] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Fetch room details
+    const fetchRoom = async () => {
+      const docRef = doc(db, 'chats', roomId);
+      const snap = await getDoc(docRef);
+      if (snap.exists()) {
+        setRoom({ id: snap.id, ...snap.data() } as ChatRoom);
+      }
+    };
+    fetchRoom();
+
+    const q = query(
+      collection(db, 'chats', roomId, 'messages'),
+      orderBy('createdAt', 'asc')
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
+      setMessages(msgs);
+      setTimeout(() => scrollToBottom(), 100);
+    });
+
+    return () => unsubscribe();
+  }, [roomId]);
+
+  const scrollToBottom = () => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  };
+
+  const toggleReaction = async (msgId: string, emoji: string) => {
+    if (!auth.currentUser) return;
+    const msgRef = doc(db, 'chats', roomId, 'messages', msgId);
+    const msg = messages.find(m => m.id === msgId);
+    const hasReacted = msg?.reactions?.[emoji]?.includes(auth.currentUser.uid);
+
+    await updateDoc(msgRef, {
+      [`reactions.${emoji}`]: hasReacted ? arrayRemove(auth.currentUser.uid) : arrayUnion(auth.currentUser.uid)
+    });
+  };
+
+  const handleSend = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!input.trim() || !auth.currentUser) return;
+
+    const content = input;
+    setInput('');
+
+    const msgData = {
+      chatId: roomId,
+      senderId: auth.currentUser.uid,
+      senderName: auth.currentUser.displayName || 'Anonymous',
+      content,
+      createdAt: serverTimestamp(),
+      type: 'text'
+    };
+
+    await addDoc(collection(db, 'chats', roomId, 'messages'), msgData);
+
+    // Update room last activity and last message for preview
+    await updateDoc(doc(db, 'chats', roomId), {
+      lastActivity: serverTimestamp(),
+      lastMessage: {
+        ...msgData,
+        createdAt: new Date().toISOString() // Fallback to now for immediate preview
+      }
+    });
+  };
+
+  const sendGameInvite = async () => {
+    if (!auth.currentUser) return;
+    const msgData = {
+      chatId: roomId,
+      senderId: auth.currentUser.uid,
+      senderName: auth.currentUser.displayName || 'Anonymous',
+      content: "Го погнали в шашки! 🔴",
+      type: 'game_invite',
+      createdAt: serverTimestamp(),
+      gameData: { type: 'checkers', status: 'pending' }
+    };
+
+    await addDoc(collection(db, 'chats', roomId, 'messages'), msgData);
+
+    await updateDoc(doc(db, 'chats', roomId), {
+      lastActivity: serverTimestamp(),
+      lastMessage: {
+        ...msgData,
+        createdAt: new Date().toISOString()
+      }
+    });
+  };
+
+  if (!room) return <div className="flex-1 bg-[var(--c-jungle-900)]" />;
+
+  return (
+    <div className="flex-1 flex flex-col bg-[var(--c-jungle-900)] h-full">
+      {/* Top Bar */}
+      <div className="p-6 glass border-b border-white/5 flex items-center justify-between z-20">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-[var(--c-moss)] flex items-center justify-center font-bold text-xl text-white">
+            {room.name?.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <h2 className="font-display font-bold text-lg text-[var(--c-mist)]">
+              {room.type === 'private' ? room.name?.replace(auth.currentUser?.displayName || '', '').replace('&', '').trim() : room.name}
+            </h2>
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-[var(--c-leaf)] animate-pulse" />
+              <span className="text-xs text-[var(--c-mist)]/40 uppercase tracking-widest font-semibold">Житель Саваны</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+           <button 
+             onClick={sendGameInvite}
+             className="w-10 h-10 glass rounded-full flex items-center justify-center hover:bg-white/10 transition-all text-[var(--c-leaf)]"
+             title="Сыграть"
+           >
+            <Gamepad2 className="w-5 h-5" />
+          </button>
+          <button className="w-10 h-10 glass rounded-full flex items-center justify-center hover:bg-white/10 transition-all text-white/40">
+            <MoreVertical className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div 
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto p-8 space-y-4 scroll-smooth"
+      >
+        <AnimatePresence>
+          {messages.map((msg, idx) => {
+            const isMe = msg.senderId === auth.currentUser?.uid;
+            return (
+              <motion.div 
+                key={msg.id}
+                initial={{ opacity: 0, x: isMe ? 20 : -20, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
+              >
+                {!isMe && (
+                   <span className="text-[10px] uppercase tracking-wider text-[var(--c-mist)]/30 font-bold mb-1 ml-2">
+                    {msg.senderName}
+                   </span>
+                )}
+                
+                <div className={`group relative max-w-[85%] sm:max-w-[70%] px-4 py-2 sm:px-5 sm:py-3 rounded-[1.5rem] ${
+                  isMe 
+                    ? 'bg-[var(--c-leaf)] text-white rounded-br-none shadow-lg shadow-[var(--c-leaf)]/10' 
+                    : 'glass rounded-bl-none'
+                }`}>
+                  {msg.type === 'game_invite' ? (
+                    <div className="flex flex-col gap-3 min-w-[200px]">
+                      <p className="font-semibold text-sm sm:text-base">🎮 {msg.content}</p>
+                      <button 
+                        onClick={() => setActiveGameId(msg.id)}
+                        className="w-full py-2 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold transition-all"
+                      >
+                        Принять вызов
+                      </button>
+                    </div>
+                  ) : (
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                  )}
+                  
+                  {/* Reactions Display */}
+                  {msg.reactions && Object.entries(msg.reactions).some(([_, users]) => (users as string[]).length > 0) && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {Object.entries(msg.reactions).map(([emoji, users]) => (users as string[]).length > 0 && (
+                        <button 
+                          key={emoji}
+                          onClick={() => toggleReaction(msg.id, emoji)}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1 ${
+                            (users as string[]).includes(auth.currentUser?.uid || '') ? 'bg-white/20' : 'bg-transparent border border-white/10'
+                          }`}
+                        >
+                          {emoji === 'heart' ? <Heart className="w-3 h-3 fill-current" /> : <ThumbsUp className="w-3 h-3 fill-current" />}
+                          <span>{(users as string[]).length}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className={`mt-1 flex items-center gap-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                    <span className="text-[10px] opacity-40">
+                      {msg.createdAt?.seconds ? format(new Date(msg.createdAt.seconds * 1000), 'HH:mm') : '...'}
+                    </span>
+                    {isMe && <ShieldCheck className="w-3 h-3 opacity-30" />}
+                  </div>
+
+                  {/* Reaction Controls (hover) */}
+                  {!msg.deleted && (
+                    <div className={`absolute top-0 group-hover:opacity-100 opacity-0 transition-opacity flex gap-1 ${isMe ? 'right-full mr-2' : 'left-full ml-2'}`}>
+                      <button onClick={() => toggleReaction(msg.id, 'heart')} className="p-1 glass rounded-full hover:text-red-400 transition-colors">
+                        <Heart className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => toggleReaction(msg.id, 'like')} className="p-1 glass rounded-full hover:text-blue-400 transition-colors">
+                        <ThumbsUp className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
+      </div>
+
+      {activeGameId && (
+        <CheckersGame 
+          gameId={activeGameId} 
+          onClose={() => setActiveGameId(null)} 
+        />
+      )}
+
+      {/* Input */}
+      <div className="p-8">
+        <form 
+          onSubmit={handleSend}
+          className="glass-dark p-2 rounded-[2rem] flex items-center gap-2 shadow-2xl"
+        >
+          <button type="button" className="w-12 h-12 flex items-center justify-center text-white/20 hover:text-[var(--c-leaf)] transition-colors">
+            <Paperclip className="w-5 h-5" />
+          </button>
+          
+          <input 
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Напишите сообщение..."
+            className="flex-1 bg-transparent border-none outline-none py-3 text-[var(--c-mist)] placeholder:text-white/20 text-sm"
+          />
+
+          <button type="button" className="w-12 h-12 flex items-center justify-center text-white/20 hover:text-[var(--c-leaf)] transition-colors">
+            <Smile className="w-5 h-5" />
+          </button>
+
+          <button 
+            type="submit"
+            disabled={!input.trim()}
+            className="w-12 h-12 bg-[var(--c-leaf)] text-white rounded-full flex items-center justify-center disabled:opacity-30 disabled:scale-95 transition-all shadow-lg shadow-[var(--c-leaf)]/20 active:scale-90"
+          >
+            <Send className="w-5 h-5 ml-0.5" />
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
