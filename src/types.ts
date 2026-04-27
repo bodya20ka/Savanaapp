@@ -26,11 +26,24 @@ export interface Message {
   senderId: string;
   senderName: string;
   content: string;
-  replyTo?: string;
+  replyTo?: {
+    id: string;
+    senderName: string;
+    content: string;
+  };
+  forwardedFrom?: {
+    senderName: string;
+  };
   edited?: boolean;
   deleted?: boolean;
   createdAt: any;
   reactions?: Record<string, string[]>;
-  type: 'text' | 'game_invite';
-  gameData?: any;
+  type: 'text' | 'game_invite' | 'media';
+  gameData?: {
+    type: 'checkers' | 'chess';
+    status: 'pending' | 'active' | 'finished';
+    gameId: string;
+  };
+  mediaUrl?: string;
+  mediaType?: 'image' | 'video';
 }

@@ -6,74 +6,89 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // Helpers
-    function isSignedIn() {
-      return request.auth != null;
+    // --- Global Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    
+    // --- Validation Helpers ---
+    function isValidUser(data) {
+      return data.uid == request.auth.uid
+        && data.username is string && data.username.size() <= 50
+        && (data.displayName == null || (data.displayName is string && data.displayName.size() <= 100));
     }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
+    function isValidChat(data) {
+      return data.members is list 
+        && data.members.size() >= 1
+        && data.type in ['private', 'channel'];
     }
 
-    function isValidId(id) {
-       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
+    function isValidMessage(data) {
+      return data.senderId == request.auth.uid
+        && data.content is string && data.content.size() <= 20000;
     }
 
     // --- Users Collection ---
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isOwner(userId)
-                    && incoming().keys().hasAll(['uid', 'username', 'displayName'])
-                    && incoming().uid == request.auth.uid;
-      allow update: if isOwner(userId)
-                    && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'bio', 'lastSeen', 'status']);
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if isOwner(userId) 
+                    && incoming().diff(existing()).affectedKeys().hasAny(['displayName', 'photoURL', 'bio', 'lastSeen', 'status']);
     }
 
     // --- Chats Collection ---
     match /chats/{chatId} {
-      allow read: if isSignedIn() && (
-        existing().type == 'channel' ||
-        request.auth.uid in existing().members
-      );
+      function isMember() {
+        return isSignedIn() && request.auth.uid in (existing() != null ? existing().members : []);
+      }
+      function isChannel() {
+        return isSignedIn() && existing() != null && existing().type == 'channel';
+      }
+
+      allow read: if isSignedIn() && (isMember() || isChannel());
       
       allow create: if isSignedIn() 
-                    && incoming().members.size() >= 1
+                    && isValidChat(incoming())
                     && request.auth.uid in incoming().members;
 
       allow update: if isSignedIn() 
-                    && request.auth.uid in existing().members
-                    && incoming().members.size() >= 1; // Basic membership check
+                    && (isMember() || isChannel())
+                    && (
+                      // Anyone who can see the chat can update its activity/metadata (for messaging)
+                      incoming().diff(existing()).affectedKeys().hasAny(['lastActivity', 'lastMessage', 'members'])
+                    );
 
-      allow delete: if isSignedIn() && request.auth.uid in existing().members;
+      allow delete: if isSignedIn() && isMember();
 
       // --- Messages Subcollection ---
       match /messages/{messageId} {
-        allow read: if isSignedIn() && (
-          get(/databases/$(database)/documents/chats/$(chatId)).data.type == 'channel' ||
-          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members
-        );
+        function getChat() {
+          return get(/databases/$(database)/documents/chats/$(chatId)).data;
+        }
+        function canReadChat() {
+          let chat = getChat();
+          return chat.type == 'channel' || request.auth.uid in chat.members;
+        }
 
-        allow create: if isSignedIn()
-                      && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members
-                      && incoming().senderId == request.auth.uid
-                      && incoming().content.size() <= 10000;
+        allow read: if isSignedIn() && canReadChat();
+
+        allow create: if isSignedIn() 
+                      && canReadChat()
+                      && isValidMessage(incoming());
 
         allow update: if isSignedIn()
+                      && canReadChat()
                       && (
-                        (existing().senderId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'edited', 'deleted', 'reactions'])) ||
-                        (incoming().diff(existing()).affectedKeys().hasOnly(['reactions'])) // Others can react
+                        // Sender can edit/delete or update reactions/state
+                        (existing().senderId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasAny(['content', 'edited', 'deleted', 'reactions', 'gameState'])) ||
+                        // Anyone who can read can react or update game state
+                        (incoming().diff(existing()).affectedKeys().hasOnly(['reactions', 'gameState']))
                       );
 
-        allow delete: if isSignedIn() 
-                      && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+        allow delete: if isSignedIn() && canReadChat();
       }
     }
   }

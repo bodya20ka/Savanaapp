@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Smile, Paperclip, MoreVertical, ShieldCheck, Gamepad2, Heart, ThumbsUp, X, Image as ImageIcon, Film, File as FileIcon, AlertCircle, Loader2, Trash2, Eraser } from 'lucide-react';
+import { Send, Smile, Paperclip, MoreVertical, ShieldCheck, Gamepad2, Heart, ThumbsUp, X, Image as ImageIcon, Film, File as FileIcon, AlertCircle, Loader2, Trash2, Eraser, Reply, Forward, Hash, MessageCircle } from 'lucide-react';
 import { auth, db } from '@/src/lib/firebase';
-import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDocs, writeBatch, limit } from 'firebase/firestore';
 import { Message, ChatRoom } from '@/src/types';
 import { format } from 'date-fns';
 import CheckersGame from './CheckersGame';
+import ChessGame from './ChessGame';
 import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
 import UserProfileModal from './UserProfileModal';
 
@@ -64,9 +65,12 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [room, setRoom] = useState<ChatRoom | null>(null);
   const [input, setInput] = useState('');
-  const [activeGameId, setActiveGameId] = useState<string | null>(null);
+  const [activeGame, setActiveGame] = useState<{ id: string, type: 'checkers' | 'chess' } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showGameSelection, setShowGameSelection] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [forwardingMsg, setForwardingMsg] = useState<Message | null>(null);
   const [showProfile, setShowProfile] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -127,24 +131,50 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
     }
   };
 
+  const deleteMessage = async (msgId: string) => {
+    if (!confirm('Удалить сообщение?')) return;
+    try {
+      await deleteDoc(doc(db, 'chats', roomId, 'messages', msgId));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `chats/${roomId}/messages/${msgId}`);
+    }
+  };
+
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim() || !auth.currentUser) return;
+    if (!input.trim() && !forwardingMsg) return;
+    if (!auth.currentUser) return;
 
     const content = input;
     setInput('');
 
-    const msgData = {
+    let msgData: any = {
       chatId: roomId,
       senderId: auth.currentUser.uid,
-      senderName: auth.currentUser.displayName || 'Anonymous',
-      content,
+      senderName: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || 'Anonymous',
+      content: forwardingMsg ? forwardingMsg.content : content,
       createdAt: serverTimestamp(),
-      type: 'text'
+      type: forwardingMsg?.type || 'text'
     };
+
+    if (replyingTo) {
+      msgData.replyTo = {
+        id: replyingTo.id,
+        senderName: replyingTo.senderName,
+        content: replyingTo.content.substring(0, 50) + (replyingTo.content.length > 50 ? '...' : '')
+      };
+    }
+
+    if (forwardingMsg) {
+      msgData.forwardedFrom = {
+        senderName: forwardingMsg.senderName
+      };
+    }
 
     try {
       await addDoc(collection(db, 'chats', roomId, 'messages'), msgData);
+      setReplyingTo(null);
+      setForwardingMsg(null);
 
       // Update room last activity and last message for preview
       await updateDoc(doc(db, 'chats', roomId), {
@@ -180,7 +210,7 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
         const msgData = {
           chatId: roomId,
           senderId: auth.currentUser?.uid,
-          senderName: auth.currentUser?.displayName || 'Anonymous',
+          senderName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'Anonymous',
           content: '',
           mediaUrl: base64,
           mediaType: file.type.startsWith('image/') ? 'image' : 'video',
@@ -224,19 +254,20 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
     }
   };
 
-  const sendGameInvite = async () => {
+  const sendGameInvite = async (type: 'checkers' | 'chess') => {
     if (!auth.currentUser) return;
     const msgData = {
       chatId: roomId,
       senderId: auth.currentUser.uid,
-      senderName: auth.currentUser.displayName || 'Anonymous',
-      content: "Го погнали в шашки! 🔴",
+      senderName: auth.currentUser.displayName || auth.currentUser.email?.split('@')[0] || 'Anonymous',
+      content: type === 'checkers' ? "Го погнали в шашки! 🔴" : "Вызываю на шахматную дуэль! ♟️",
       type: 'game_invite',
       createdAt: serverTimestamp(),
-      gameData: { type: 'checkers', status: 'pending' }
+      gameData: { type, status: 'pending' }
     };
 
     await addDoc(collection(db, 'chats', roomId, 'messages'), msgData);
+    setShowGameSelection(false);
 
     await updateDoc(doc(db, 'chats', roomId), {
       lastActivity: serverTimestamp(),
@@ -311,13 +342,42 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-           <button 
-             onClick={sendGameInvite}
-             className="w-8 h-8 sm:w-10 sm:h-10 glass rounded-full flex items-center justify-center hover:bg-white/10 transition-all text-[var(--c-leaf)]"
-             title="Сыграть"
-           >
-            <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5" />
-          </button>
+           <div className="relative">
+             <button 
+               onClick={() => setShowGameSelection(!showGameSelection)}
+               className={`w-8 h-8 sm:w-10 sm:h-10 glass rounded-full flex items-center justify-center hover:bg-white/10 transition-all ${showGameSelection ? 'text-[var(--c-leaf)]' : 'text-[var(--c-leaf)]'}`}
+               title="Сыграть"
+             >
+               <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5" />
+             </button>
+
+             <AnimatePresence>
+               {showGameSelection && (
+                 <>
+                   <div className="fixed inset-0 z-30" onClick={() => setShowGameSelection(false)} />
+                   <motion.div
+                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                     animate={{ opacity: 1, y: 0, scale: 1 }}
+                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                     className="absolute right-0 mt-2 w-48 glass rounded-2xl p-2 shadow-2xl z-40 border border-white/5"
+                   >
+                     <button
+                       onClick={() => sendGameInvite('checkers')}
+                       className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-white/5 rounded-xl transition-colors"
+                     >
+                       <span>🔴</span> Шашки
+                     </button>
+                     <button
+                       onClick={() => sendGameInvite('chess')}
+                       className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-white/5 rounded-xl transition-colors"
+                     >
+                       <span>♟️</span> Шахматы
+                     </button>
+                   </motion.div>
+                 </>
+               )}
+             </AnimatePresence>
+           </div>
           <div className="relative">
             <button 
               onClick={() => setShowMenu(!showMenu)}
@@ -390,14 +450,28 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
                     ? 'bg-[var(--c-leaf)] text-white rounded-br-none shadow-lg shadow-[var(--c-leaf)]/10' 
                     : 'glass rounded-bl-none'
                 }`}>
+                  {msg.forwardedFrom && (
+                    <div className="flex items-center gap-1.5 opacity-40 mb-1 border-b border-white/5 pb-1">
+                      <Forward className="w-3 h-3" />
+                      <span className="text-[10px] uppercase tracking-widest font-bold">Переслано от {msg.forwardedFrom.senderName}</span>
+                    </div>
+                  )}
+
+                  {msg.replyTo && (
+                    <div className="bg-white/5 rounded-lg p-2 mb-2 border-l-2 border-[var(--c-leaf)] opacity-60">
+                      <span className="text-[10px] font-bold block mb-0.5">{msg.replyTo.senderName}</span>
+                      <p className="text-[11px] truncate italic">{msg.replyTo.content}</p>
+                    </div>
+                  )}
+
                   {msg.type === 'game_invite' ? (
                     <div className="flex flex-col gap-3 min-w-[200px]">
                       <p className="font-semibold text-sm sm:text-base">🎮 {msg.content}</p>
                       <button 
-                        onClick={() => setActiveGameId(msg.id)}
+                        onClick={() => setActiveGame({ id: msg.id, type: msg.gameData?.type || 'checkers' })}
                         className="w-full py-2 bg-white/20 hover:bg-white/30 rounded-xl text-xs font-bold transition-all"
                       >
-                        Принять вызов
+                        {msg.gameData?.status === 'pending' ? 'Принять вызов' : 'Открыть игру'}
                       </button>
                     </div>
                   ) : msg.type === 'media' ? (
@@ -424,10 +498,13 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
                             (users as string[]).includes(auth.currentUser?.uid || '') ? 'bg-white/20' : 'bg-transparent border border-white/10'
                           }`}
                         >
-                          {emoji === 'heart' ? <Heart className="w-3 h-3 fill-current" /> : <ThumbsUp className="w-3 h-3 fill-current" />}
+                          {emoji === 'heart' ? <Heart className="w-3 h-3 fill-current text-red-400" /> : <ThumbsUp className="w-3 h-3 fill-current text-blue-400" />}
                           <span>{(users as string[]).length}</span>
                         </button>
                       ))}
+                      <button onClick={() => toggleReaction(msg.id, 'fire')} className={`text-[10px] px-1.5 py-0.5 rounded-full flex items-center gap-1 bg-transparent border border-white/10`}>
+                        🔥 <span>{msg.reactions['fire']?.length || 0}</span>
+                      </button>
                     </div>
                   )}
 
@@ -438,17 +515,26 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
                     {isMe && <ShieldCheck className="w-3 h-3 opacity-30" />}
                   </div>
 
-                  {/* Reaction Controls (hover) */}
-                  {!msg.deleted && (
-                    <div className={`absolute top-0 group-hover:opacity-100 opacity-0 transition-opacity flex gap-1 ${isMe ? 'right-full mr-2' : 'left-full ml-2'}`}>
-                      <button onClick={() => toggleReaction(msg.id, 'heart')} className="p-1 glass rounded-full hover:text-red-400 transition-colors">
-                        <Heart className="w-3.5 h-3.5" />
+                  {/* Message Controls (hover) */}
+                  <div className={`absolute top-0 group-hover:opacity-100 opacity-0 transition-opacity flex gap-1 ${isMe ? 'right-full mr-2' : 'left-full ml-2'}`}>
+                    <button onClick={() => setReplyingTo(msg)} className="p-1 glass rounded-full hover:text-[var(--c-leaf)] transition-colors" title="Ответить">
+                      <Reply className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => setForwardingMsg(msg)} className="p-1 glass rounded-full hover:text-blue-400 transition-colors" title="Переслать">
+                      <Forward className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => toggleReaction(msg.id, 'heart')} className="p-1 glass rounded-full hover:text-red-400 transition-colors">
+                      <Heart className="w-3.5 h-3.5" />
+                    </button>
+                    <button onClick={() => toggleReaction(msg.id, 'fire')} className="p-1 glass rounded-full hover:text-orange-400 transition-colors">
+                      🔥
+                    </button>
+                    {isMe && (
+                      <button onClick={() => deleteMessage(msg.id)} className="p-1 glass rounded-full hover:text-red-500 transition-colors" title="Удалить">
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                      <button onClick={() => toggleReaction(msg.id, 'like')} className="p-1 glass rounded-full hover:text-blue-400 transition-colors">
-                        <ThumbsUp className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </motion.div>
             );
@@ -456,10 +542,19 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
         </AnimatePresence>
       </div>
 
-      {activeGameId && (
+      {activeGame && activeGame.type === 'checkers' && (
         <CheckersGame 
-          gameId={activeGameId} 
-          onClose={() => setActiveGameId(null)} 
+          messageId={activeGame.id} 
+          chatId={roomId}
+          onClose={() => setActiveGame(null)} 
+        />
+      )}
+
+      {activeGame && activeGame.type === 'chess' && (
+        <ChessGame 
+          messageId={activeGame.id} 
+          chatId={roomId}
+          onClose={() => setActiveGame(null)} 
         />
       )}
 
@@ -473,6 +568,45 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
       {/* Input */}
       <div className="p-4 sm:p-8 relative">
         <AnimatePresence>
+          {replyingTo && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="absolute bottom-full left-8 right-8 mb-4 glass p-4 rounded-2xl flex items-center justify-between border border-[var(--c-leaf)]/30"
+            >
+              <div className="flex items-center gap-3">
+                <Reply className="w-4 h-4 text-[var(--c-leaf)]" />
+                <div>
+                  <span className="text-[10px] font-bold block uppercase tracking-widest opacity-40">Ответ {replyingTo.senderName}</span>
+                  <p className="text-xs truncate max-w-[200px] italic">{replyingTo.content}</p>
+                </div>
+              </div>
+              <button onClick={() => setReplyingTo(null)} className="opacity-40 hover:opacity-100">
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
+
+          {forwardingMsg && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="absolute bottom-full left-8 right-8 mb-4 glass p-4 rounded-2xl flex items-center justify-between border border-blue-500/30"
+            >
+              <div className="flex items-center gap-3">
+                <Forward className="w-4 h-4 text-blue-400" />
+                <div>
+                  <span className="text-[10px] font-bold block uppercase tracking-widest opacity-40">Переслать от {forwardingMsg.senderName}</span>
+                  <p className="text-xs truncate max-w-[200px] italic">{forwardingMsg.content}</p>
+                </div>
+              </div>
+              <button onClick={() => setForwardingMsg(null)} className="opacity-40 hover:opacity-100">
+                <X className="w-4 h-4" />
+              </button>
+            </motion.div>
+          )}
           {showEmojiPicker && (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
