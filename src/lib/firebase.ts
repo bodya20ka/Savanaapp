@@ -3,6 +3,8 @@ import {
   getAuth, 
   GoogleAuthProvider, 
   signInWithPopup, 
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   onAuthStateChanged, 
   User as FirebaseUser,
   setPersistence,
@@ -21,46 +23,60 @@ googleProvider.setCustomParameters({
   prompt: 'select_account'
 });
 
+export async function ensureUserProfile(user: any) {
+  const userRef = doc(db, 'users', user.uid);
+  const userDoc = await getDoc(userRef);
+  
+  if (!userDoc.exists()) {
+    await setDoc(userRef, {
+      uid: user.uid,
+      username: user.email?.split('@')[0] || user.uid,
+      displayName: user.displayName || user.email?.split('@')[0] || 'Житель Саваны',
+      photoURL: user.photoURL,
+      bio: 'Добро пожаловать в джунгли!',
+      lastSeen: new Date().toISOString(),
+      status: 'online'
+    });
+  } else {
+    await updateDoc(userRef, {
+      lastSeen: new Date().toISOString(),
+      status: 'online'
+    });
+  }
+}
+
 export async function signIn() {
   try {
-    // Explicitly set persistence to local to be safe
     await setPersistence(auth, browserLocalPersistence);
-    
-    console.log('Attempting sign in with popup...');
     const result = await signInWithPopup(auth, googleProvider);
-    const user = result.user;
-    
-    if (!user) throw new Error('No user returned from sign in');
-    console.log('Sign in successful:', user.uid);
-    
-    // Create or update user profile
-    const userRef = doc(db, 'users', user.uid);
-    const userDoc = await getDoc(userRef);
-    
-    if (!userDoc.exists()) {
-      await setDoc(userRef, {
-        uid: user.uid,
-        username: user.email?.split('@')[0] || user.uid,
-        displayName: user.displayName || 'Житель Саваны',
-        photoURL: user.photoURL,
-        bio: 'Добро пожаловать в джунгли!',
-        lastSeen: new Date().toISOString(),
-        status: 'online'
-      });
-    } else {
-      await updateDoc(userRef, {
-        lastSeen: new Date().toISOString(),
-        status: 'online'
-      });
-    }
+    if (!result.user) throw new Error('No user returned from sign in');
+    await ensureUserProfile(result.user);
   } catch (error: any) {
-    console.error('Detailed SignIn Error:', {
-      code: error.code,
-      message: error.message,
-      customData: error.customData,
-      stack: error.stack
-    });
-    // Re-throw for UI feedback if needed
+    console.error('Detailed SignIn Error:', error);
+    throw error;
+  }
+}
+
+export async function signUpWithEmail(email: string, pass: string) {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+    const result = await createUserWithEmailAndPassword(auth, email, pass);
+    await ensureUserProfile(result.user);
+    return result.user;
+  } catch (error: any) {
+    console.error('Signup Error:', error);
+    throw error;
+  }
+}
+
+export async function signInWithEmail(email: string, pass: string) {
+  try {
+    await setPersistence(auth, browserLocalPersistence);
+    const result = await signInWithEmailAndPassword(auth, email, pass);
+    await ensureUserProfile(result.user);
+    return result.user;
+  } catch (error: any) {
+    console.error('Signin Email Error:', error);
     throw error;
   }
 }
