@@ -157,7 +157,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="glass p-8 rounded-[2.5rem] w-full max-w-sm relative z-10 shadow-2xl"
             >
-              <h2 className="text-2xl font-display font-bold mb-6 text-center">Новая тропа</h2>
+              <h2 className="text-2xl font-display font-bold mb-6 text-center">Новая группа</h2>
               
               <div className="space-y-4">
                 <div>
@@ -397,7 +397,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
           className="w-full py-4 bg-[var(--c-leaf)] hover:bg-[var(--c-leaf)]/90 text-white rounded-3xl font-bold flex items-center justify-center gap-3 transition-transform active:scale-95 shadow-xl shadow-[var(--c-leaf)]/20"
         >
           <Plus className="w-5 h-5" />
-          <span>Новая тропа</span>
+          <span>Новая группа</span>
         </button>
       </div>
     </div>

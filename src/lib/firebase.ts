@@ -1,8 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
-  GoogleAuthProvider, 
-  signInWithPopup, 
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   onAuthStateChanged, 
@@ -16,12 +14,6 @@ import firebaseConfig from '@/firebase-applet-config.json';
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const googleProvider = new GoogleAuthProvider();
-
-// Add some reasonable defaults for the provider
-googleProvider.setCustomParameters({
-  prompt: 'select_account'
-});
 
 export async function ensureUserProfile(user: any) {
   const userRef = doc(db, 'users', user.uid);
@@ -42,18 +34,6 @@ export async function ensureUserProfile(user: any) {
       lastSeen: new Date().toISOString(),
       status: 'online'
     });
-  }
-}
-
-export async function signIn() {
-  try {
-    await setPersistence(auth, browserLocalPersistence);
-    const result = await signInWithPopup(auth, googleProvider);
-    if (!result.user) throw new Error('No user returned from sign in');
-    await ensureUserProfile(result.user);
-  } catch (error: any) {
-    console.error('Detailed SignIn Error:', error);
-    throw error;
   }
 }
 

@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Smile, Paperclip, MoreVertical, ShieldCheck, Gamepad2, Heart, ThumbsUp } from 'lucide-react';
+import { Send, Smile, Paperclip, MoreVertical, ShieldCheck, Gamepad2, Heart, ThumbsUp, X, Image as ImageIcon, Film, File as FileIcon, AlertCircle, Loader2 } from 'lucide-react';
 import { auth, db } from '@/src/lib/firebase';
 import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { Message, ChatRoom } from '@/src/types';
 import { format } from 'date-fns';
 import CheckersGame from './CheckersGame';
+import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
+import UserProfileModal from './UserProfileModal';
 
 interface ChatWindowProps {
   roomId: string;
@@ -16,6 +18,12 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
   const [room, setRoom] = useState<ChatRoom | null>(null);
   const [input, setInput] = useState('');
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showProfile, setShowProfile] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -86,6 +94,60 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
         createdAt: new Date().toISOString() // Fallback to now for immediate preview
       }
     });
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !auth.currentUser) return;
+
+    // Strict limit for Firestore Base64 storage (max ~700KB results in ~1MB Base64)
+    if (file.size > 700 * 1024) {
+      setUploadError('Файл слишком велик для бесплатного плана. Максимум 700 КБ.');
+      return;
+    }
+
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target?.result as string;
+        
+        const msgData = {
+          chatId: roomId,
+          senderId: auth.currentUser?.uid,
+          senderName: auth.currentUser?.displayName || 'Anonymous',
+          content: '',
+          mediaUrl: base64,
+          mediaType: file.type.startsWith('image/') ? 'image' : 'video',
+          createdAt: serverTimestamp(),
+          type: 'media'
+        };
+
+        await addDoc(collection(db, 'chats', roomId, 'messages'), msgData);
+        setUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      setUploadError('Ошибка при обработке файла.');
+      setUploading(false);
+    }
+  };
+
+  const onEmojiClick = (emojiData: EmojiClickData) => {
+    setInput(prev => prev + emojiData.emoji);
+  };
+
+  const viewProfile = async (uid: string) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (userDoc.exists()) {
+        setShowProfile({ uid: userDoc.id, ...userDoc.data() });
+      }
+    } catch (err) {
+      console.error('Error fetching profile:', err);
+    }
   };
 
   const sendGameInvite = async () => {
@@ -161,9 +223,12 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
                 className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}
               >
                 {!isMe && (
-                   <span className="text-[10px] uppercase tracking-wider text-[var(--c-mist)]/30 font-bold mb-1 ml-2">
+                   <button 
+                     onClick={() => viewProfile(msg.senderId)}
+                     className="text-[10px] uppercase tracking-wider text-[var(--c-mist)]/30 font-bold mb-1 ml-2 hover:text-[var(--c-leaf)] transition-colors"
+                   >
                     {msg.senderName}
-                   </span>
+                   </button>
                 )}
                 
                 <div className={`group relative max-w-[85%] sm:max-w-[70%] px-4 py-2 sm:px-5 sm:py-3 rounded-[1.5rem] ${
@@ -180,6 +245,15 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
                       >
                         Принять вызов
                       </button>
+                    </div>
+                  ) : msg.type === 'media' ? (
+                    <div className="space-y-2">
+                       {msg.mediaType === 'image' ? (
+                         <img src={msg.mediaUrl} alt="media" className="max-w-full rounded-xl" />
+                       ) : (
+                         <video src={msg.mediaUrl} controls className="max-w-full rounded-xl" />
+                       )}
+                       {msg.content && <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>}
                     </div>
                   ) : (
                     <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
@@ -235,31 +309,97 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
         />
       )}
 
+      {showProfile && (
+        <UserProfileModal 
+          user={showProfile} 
+          onClose={() => setShowProfile(null)} 
+        />
+      )}
+
       {/* Input */}
-      <div className="p-8">
+      <div className="p-8 relative">
+        <AnimatePresence>
+          {showEmojiPicker && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="absolute bottom-full right-8 mb-4 z-[100]"
+            >
+              <div className="relative glass p-1 rounded-3xl shadow-2xl">
+                 <button 
+                   onClick={() => setShowEmojiPicker(false)}
+                   className="absolute -top-3 -right-3 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg z-[101]"
+                 >
+                   <X className="w-4 h-4" />
+                 </button>
+                 <EmojiPicker 
+                   onEmojiClick={onEmojiClick}
+                   theme={Theme.DARK}
+                   width={300}
+                   height={400}
+                   lazyLoadEmojis
+                 />
+              </div>
+            </motion.div>
+          )}
+
+          {uploadError && (
+             <motion.div 
+               initial={{ opacity: 0, y: 10 }}
+               animate={{ opacity: 1, y: 0 }}
+               exit={{ opacity: 0, y: 10 }}
+               className="absolute bottom-full left-8 mb-4 glass bg-red-500/20 p-4 rounded-2xl flex items-center gap-3 border border-red-500/30"
+             >
+               <AlertCircle className="w-5 h-5 text-red-400" />
+               <p className="text-xs text-red-100">{uploadError}</p>
+               <button onClick={() => setUploadError(null)} className="ml-2 opacity-40 hover:opacity-100">
+                  <X className="w-4 h-4" />
+               </button>
+             </motion.div>
+          )}
+        </AnimatePresence>
+
         <form 
           onSubmit={handleSend}
           className="glass-dark p-2 rounded-[2rem] flex items-center gap-2 shadow-2xl"
         >
-          <button type="button" className="w-12 h-12 flex items-center justify-center text-white/20 hover:text-[var(--c-leaf)] transition-colors">
-            <Paperclip className="w-5 h-5" />
+          <input 
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            className="hidden"
+            accept="image/*,video/*"
+          />
+          <button 
+            type="button" 
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="w-12 h-12 flex items-center justify-center text-white/20 hover:text-[var(--c-leaf)] transition-colors disabled:opacity-50"
+          >
+            {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Paperclip className="w-5 h-5" />}
           </button>
           
           <input 
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onFocus={() => setShowEmojiPicker(false)}
             placeholder="Напишите сообщение..."
             className="flex-1 bg-transparent border-none outline-none py-3 text-[var(--c-mist)] placeholder:text-white/20 text-sm"
           />
 
-          <button type="button" className="w-12 h-12 flex items-center justify-center text-white/20 hover:text-[var(--c-leaf)] transition-colors">
+          <button 
+            type="button" 
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className={`w-12 h-12 flex items-center justify-center transition-colors ${showEmojiPicker ? 'text-[var(--c-leaf)]' : 'text-white/20'}`}
+          >
             <Smile className="w-5 h-5" />
           </button>
 
           <button 
             type="submit"
-            disabled={!input.trim()}
+            disabled={!input.trim() || uploading}
             className="w-12 h-12 bg-[var(--c-leaf)] text-white rounded-full flex items-center justify-center disabled:opacity-30 disabled:scale-95 transition-all shadow-lg shadow-[var(--c-leaf)]/20 active:scale-90"
           >
             <Send className="w-5 h-5 ml-0.5" />

@@ -85,7 +85,7 @@ export default function App() {
               </div>
               <h2 className="text-4xl font-display font-bold mb-4 tracking-tight">Савана ждет тебя</h2>
               <p className="max-w-md text-lg text-[var(--c-mist)]/40 leading-relaxed italic">
-                В экосистеме общения каждый голос — это сердцебиение. Выбери тропу, чтобы начать свой путь.
+                В экосистеме общения каждый голос — это сердцебиение. Выбери группу, чтобы начать свой путь.
               </p>
               <div className="mt-12 flex gap-4">
                 <div className="px-4 py-2 glass rounded-full text-xs font-bold uppercase tracking-widest text-white/20">
