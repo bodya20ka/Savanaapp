@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LogIn, AlertCircle, Loader2, Mail, Lock, UserPlus } from 'lucide-react';
+import { LogIn, AlertCircle, Loader2, Mail, Lock, UserPlus, MessageSquare } from 'lucide-react';
 import { signInWithEmail, signUpWithEmail } from '@/src/lib/firebase';
 
 export default function Auth() {

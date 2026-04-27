@@ -52,6 +52,8 @@ service cloud.firestore {
                     && request.auth.uid in existing().members
                     && incoming().members.size() >= 1; // Basic membership check
 
+      allow delete: if isSignedIn() && request.auth.uid in existing().members;
+
       // --- Messages Subcollection ---
       match /messages/{messageId} {
         allow read: if isSignedIn() && (
@@ -69,6 +71,9 @@ service cloud.firestore {
                         (existing().senderId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'edited', 'deleted', 'reactions'])) ||
                         (incoming().diff(existing()).affectedKeys().hasOnly(['reactions'])) // Others can react
                       );
+
+        allow delete: if isSignedIn() 
+                      && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members;
       }
     }
   }

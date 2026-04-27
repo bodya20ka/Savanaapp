@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Smile, Paperclip, MoreVertical, ShieldCheck, Gamepad2, Heart, ThumbsUp, X, Image as ImageIcon, Film, File as FileIcon, AlertCircle, Loader2 } from 'lucide-react';
+import { Send, Smile, Paperclip, MoreVertical, ShieldCheck, Gamepad2, Heart, ThumbsUp, X, Image as ImageIcon, Film, File as FileIcon, AlertCircle, Loader2, Trash2, Eraser } from 'lucide-react';
 import { auth, db } from '@/src/lib/firebase';
-import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, addDoc, serverTimestamp, doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
 import { Message, ChatRoom } from '@/src/types';
 import { format } from 'date-fns';
 import CheckersGame from './CheckersGame';
@@ -66,6 +66,7 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
   const [input, setInput] = useState('');
   const [activeGameId, setActiveGameId] = useState<string | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [showProfile, setShowProfile] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -88,8 +89,9 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
     };
     fetchRoom();
 
+    const messagesRef = collection(db, 'chats', roomId, 'messages');
     const q = query(
-      collection(db, 'chats', roomId, 'messages'),
+      messagesRef,
       orderBy('createdAt', 'asc')
     );
 
@@ -245,44 +247,124 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
     });
   };
 
+  const clearHistory = async () => {
+    if (!confirm('Вы уверены, что хотите очистить историю сообщений? Это удалит сообщения только для вас локально (в этой реализации для всех)')) return;
+    try {
+      const msgsRef = collection(db, 'chats', roomId, 'messages');
+      const snap = await getDocs(msgsRef);
+      const batch = writeBatch(db);
+      snap.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+      
+      // Update room last message
+      await updateDoc(doc(db, 'chats', roomId), {
+        lastMessage: null
+      });
+      setShowMenu(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `chats/${roomId}/messages`);
+    }
+  };
+
+  const deleteChat = async () => {
+    if (!confirm('Вы уверены, что хотите удалить этот чат?')) return;
+    try {
+      // Delete all messages first
+      const msgsRef = collection(db, 'chats', roomId, 'messages');
+      const snap = await getDocs(msgsRef);
+      const batch = writeBatch(db);
+      snap.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+
+      // Delete the chat document
+      await deleteDoc(doc(db, 'chats', roomId));
+      window.location.reload(); // Quick way to reset state
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `chats/${roomId}`);
+    }
+  };
+
   if (!room) return <div className="flex-1 bg-[var(--c-jungle-900)]" />;
 
   return (
     <div className="flex-1 flex flex-col bg-[var(--c-jungle-900)] h-full">
       {/* Top Bar */}
-      <div className="p-6 glass border-b border-white/5 flex items-center justify-between z-20">
+      <div className="p-4 sm:p-6 glass border-b border-white/5 flex items-center justify-between z-20">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-[var(--c-moss)] flex items-center justify-center font-bold text-xl text-white">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-[var(--c-moss)] flex items-center justify-center font-bold text-lg sm:text-xl text-white">
             {room.name?.charAt(0).toUpperCase()}
           </div>
           <div>
-            <h2 className="font-display font-bold text-lg text-[var(--c-mist)]">
-              {room.type === 'private' ? room.name?.replace(auth.currentUser?.displayName || '', '').replace('&', '').trim() : room.name}
+            <h2 className="font-display font-bold text-sm sm:text-lg text-[var(--c-mist)]">
+              {room.type === 'private' 
+                ? room.name?.split('&').find(n => n.trim() !== (auth.currentUser?.displayName || (auth.currentUser?.email?.split('@')[0] || '')))?.trim() || room.name
+                : room.name}
             </h2>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-[var(--c-leaf)] animate-pulse" />
-              <span className="text-xs text-[var(--c-mist)]/40 uppercase tracking-widest font-semibold">Пользователь</span>
+              <span className="text-[10px] sm:text-xs text-[var(--c-mist)]/40 uppercase tracking-widest font-semibold">Житель Саваны</span>
             </div>
           </div>
         </div>
         <div className="flex items-center gap-2">
            <button 
              onClick={sendGameInvite}
-             className="w-10 h-10 glass rounded-full flex items-center justify-center hover:bg-white/10 transition-all text-[var(--c-leaf)]"
+             className="w-8 h-8 sm:w-10 sm:h-10 glass rounded-full flex items-center justify-center hover:bg-white/10 transition-all text-[var(--c-leaf)]"
              title="Сыграть"
            >
-            <Gamepad2 className="w-5 h-5" />
+            <Gamepad2 className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
-          <button className="w-10 h-10 glass rounded-full flex items-center justify-center hover:bg-white/10 transition-all text-white/40">
-            <MoreVertical className="w-5 h-5" />
-          </button>
+          <div className="relative">
+            <button 
+              onClick={() => setShowMenu(!showMenu)}
+              className={`w-8 h-8 sm:w-10 sm:h-10 glass rounded-full flex items-center justify-center hover:bg-white/10 transition-all ${showMenu ? 'text-[var(--c-leaf)]' : 'text-white/40'}`}
+            >
+              <MoreVertical className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+
+            <AnimatePresence>
+              {showMenu && (
+                <>
+                  <div 
+                    className="fixed inset-0 z-30" 
+                    onClick={() => setShowMenu(false)} 
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 mt-2 w-48 glass rounded-2xl p-2 shadow-2xl z-40 border border-white/5"
+                  >
+                    <button
+                      onClick={clearHistory}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-white/5 rounded-xl transition-colors text-white/70"
+                    >
+                      <Eraser className="w-4 h-4" />
+                      Очистить историю
+                    </button>
+                    <button
+                      onClick={deleteChat}
+                      className="w-full flex items-center gap-3 px-4 py-3 text-sm hover:bg-red-500/10 text-red-400 rounded-xl transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Удалить чат
+                    </button>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
       </div>
 
       {/* Messages */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-8 space-y-4 scroll-smooth"
+        className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 scroll-smooth"
       >
         <AnimatePresence>
           {messages.map((msg, idx) => {
@@ -389,7 +471,7 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
       )}
 
       {/* Input */}
-      <div className="p-8 relative">
+      <div className="p-4 sm:p-8 relative">
         <AnimatePresence>
           {showEmojiPicker && (
             <motion.div 

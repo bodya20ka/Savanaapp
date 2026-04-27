@@ -127,7 +127,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
         createdBy: auth.currentUser.uid,
         createdAt: serverTimestamp(),
         lastActivity: serverTimestamp(),
-        name: `${auth.currentUser.displayName} & ${targetUser.displayName}`
+        name: `${auth.currentUser.displayName || auth.currentUser.email?.split('@')[0]} & ${targetUser.displayName || targetUser.username}`
       });
 
       onSelectRoom(docRef.id);
@@ -305,7 +305,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
                   className="w-full py-4 bg-white/5 hover:bg-red-500/10 text-red-400 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all"
                 >
                   <LogOut className="w-4 h-4" />
-                  Выйти из системы
+                  Выйти из Саваны
                 </button>
               </div>
             </motion.div>
@@ -323,7 +323,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
              {auth.currentUser?.photoURL ? <img src={auth.currentUser.photoURL} className="w-full h-full object-cover" /> : '🦁'}
           </div>
           <div className="hidden sm:block">
-            <span className="text-sm font-bold block truncate max-w-[120px]">{auth.currentUser?.displayName}</span>
+            <span className="text-sm font-bold block truncate max-w-[120px]">{auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0]}</span>
             <span className="text-[10px] uppercase tracking-tighter text-[var(--c-leaf)] font-bold opacity-60">Статус: В сети</span>
           </div>
         </button>
@@ -344,7 +344,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             onFocus={() => setIsSearching(true)}
-            placeholder="Поиск пользователей..."
+            placeholder="Поиск жителей..."
             className="w-full bg-white/5 border border-white/5 rounded-2xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-[var(--c-leaf)]/50 transition-all"
           />
           {isSearching && (
@@ -384,7 +384,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
                   </div>
                 </button>
               )) : (
-                <div className="p-4 text-center text-sm opacity-40">Пользователи не найдены</div>
+                <div className="p-4 text-center text-sm opacity-40">Жители не найдены</div>
               )}
             </motion.div>
           )}
@@ -435,7 +435,9 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
             <div className="text-left min-w-0 flex-1">
               <div className="flex justify-between items-baseline gap-2">
                  <h3 className="font-semibold truncate text-[var(--c-mist)]">
-                  {room.type === 'private' ? room.name?.replace(auth.currentUser?.displayName || '', '').replace('&', '').trim() : room.name}
+                  {room.type === 'private' 
+                    ? room.name?.split('&').find(n => n.trim() !== (auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0]))?.trim() || room.name
+                    : room.name}
                  </h3>
                  <span className="text-[10px] opacity-30 whitespace-nowrap">
                   {room.lastActivity ? new Date(room.lastActivity.seconds * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
