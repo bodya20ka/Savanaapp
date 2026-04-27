@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
+import { doc, getDocFromServer } from 'firebase/firestore';
 import { auth, db } from '@/src/lib/firebase';
 import Auth from '@/src/components/Auth';
 import Sidebar from '@/src/components/Sidebar';
@@ -13,6 +14,18 @@ export default function App() {
   const [selectedRoomId, setSelectedRoomId] = useState<string | undefined>();
 
   useEffect(() => {
+    // Test connection to prevent Firebase errors on startup
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration.");
+        }
+      }
+    };
+    testConnection();
+
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
@@ -26,8 +39,9 @@ export default function App() {
          <motion.div 
            animate={{ scale: [1, 1.2, 1], opacity: [0.3, 1, 0.3] }}
            transition={{ repeat: Infinity, duration: 2 }}
+           className="text-6xl"
          >
-           <Trees className="w-16 h-16 text-[var(--c-leaf)]" />
+           🦁
          </motion.div>
       </div>
     );
