@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { auth } from '@/src/lib/firebase';
 import { X, User, MapPin, Calendar, MessageSquare, Shield } from 'lucide-react';
 import { format } from 'date-fns';
 
@@ -97,11 +98,13 @@ export default function UserProfileModal({ user, onClose }: UserProfileModalProp
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <button className="py-4 glass-dark rounded-3xl flex flex-col items-center gap-2 hover:bg-white/10 transition-all group">
-                  <MessageSquare className="w-5 h-5 opacity-40 group-hover:text-[var(--c-leaf)] transition-colors" />
-                  <span className="text-[10px] uppercase tracking-widest font-bold opacity-30">Написать</span>
-                </button>
+              <div className={user.uid === auth.currentUser?.uid ? "grid grid-cols-1 gap-4" : "grid grid-cols-2 gap-4"}>
+                {user.uid !== auth.currentUser?.uid && (
+                  <button className="py-4 glass-dark rounded-3xl flex flex-col items-center gap-2 hover:bg-white/10 transition-all group">
+                    <MessageSquare className="w-5 h-5 opacity-40 group-hover:text-[var(--c-leaf)] transition-colors" />
+                    <span className="text-[10px] uppercase tracking-widest font-bold opacity-30">Написать</span>
+                  </button>
+                )}
                 <div className="py-4 glass-dark rounded-3xl flex flex-col items-center gap-2">
                   <span className="text-xl font-bold text-[var(--c-leaf)]">15</span>
                   <span className="text-[10px] uppercase tracking-widest font-bold opacity-30">Групп</span>

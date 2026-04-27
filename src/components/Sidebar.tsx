@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Plus, MessageSquare, Users, Radio, LogOut, X, User, Trees } from 'lucide-react';
+import { Search, Plus, MessageSquare, Users, Radio, LogOut, X, User, Trees, Settings } from 'lucide-react';
 import { auth, db, signOut } from '@/src/lib/firebase';
 import { collection, query, where, onSnapshot, orderBy, addDoc, serverTimestamp, getDocs, doc, updateDoc } from 'firebase/firestore';
 import { ChatRoom, UserProfile } from '@/src/types';
+import SettingsModal from './SettingsModal';
+import UserProfileModal from './UserProfileModal';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -138,9 +140,9 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
     }
   };
 
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [newBio, setNewBio] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'group' | 'private'>('all');
 
   useEffect(() => {
@@ -148,24 +150,11 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
     const unsub = onSnapshot(doc(db, 'users', auth.currentUser.uid), (snapshot) => {
       const data = snapshot.data() as UserProfile;
       setProfile(data);
-      setNewBio(data?.bio || '');
     }, (err) => {
       handleFirestoreError(err, OperationType.GET, `users/${auth.currentUser?.uid}`);
     });
     return () => unsub();
   }, []);
-
-  const updateBio = async () => {
-    if (!auth.currentUser) return;
-    try {
-      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-        bio: newBio
-      });
-      setIsProfileOpen(false);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
-    }
-  };
 
   const filteredRooms = rooms.filter(room => {
     if (activeFilter === 'all') return true;
@@ -252,64 +241,17 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
         )}
       </AnimatePresence>
 
+      {/* Settings Modal */}
+      <AnimatePresence>
+        {isSettingsOpen && profile && (
+          <SettingsModal profile={profile} onClose={() => setIsSettingsOpen(false)} />
+        )}
+      </AnimatePresence>
+
       {/* Profile Modal */}
       <AnimatePresence>
         {isProfileOpen && profile && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
-              onClick={() => setIsProfileOpen(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-md"
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="glass p-8 rounded-[2.5rem] w-full max-w-sm relative z-10 text-center shadow-2xl"
-            >
-              <button 
-                onClick={() => setIsProfileOpen(false)}
-                className="absolute top-6 right-6 text-white/20 hover:text-white transition-all"
-              >
-                <X className="w-6 h-6" />
-              </button>
-              
-              <div className="w-24 h-24 rounded-3xl bg-[var(--c-leaf)] mx-auto mb-6 flex items-center justify-center overflow-hidden shadow-xl shadow-[var(--c-leaf)]/20">
-                {profile.photoURL ? <img src={profile.photoURL} className="w-full h-full object-cover" /> : <User className="w-12 h-12" />}
-              </div>
-              
-              <h2 className="text-2xl font-display font-bold mb-1">{profile.displayName}</h2>
-              <p className="text-sm text-[var(--c-leaf)] font-bold mb-4">@{profile.username}</p>
-              
-              <div className="mb-6">
-                <label className="text-[10px] uppercase tracking-widest text-white/30 font-bold block mb-2 px-2 text-left">О себе</label>
-                <textarea 
-                  value={newBio}
-                  onChange={(e) => setNewBio(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm text-[var(--c-mist)] focus:outline-none focus:border-[var(--c-leaf)]/50 transition-all resize-none h-24"
-                  placeholder="Расскажите о себе..."
-                />
-              </div>
-
-              <div className="space-y-3">
-                <button 
-                  onClick={updateBio}
-                  className="w-full py-4 bg-[var(--c-leaf)] hover:bg-[var(--c-leaf)]/90 text-white rounded-2xl font-bold transition-all shadow-lg shadow-[var(--c-leaf)]/20"
-                >
-                  Сохранить
-                </button>
-                <button 
-                  onClick={() => signOut()}
-                  className="w-full py-4 bg-white/5 hover:bg-red-500/10 text-red-400 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all"
-                >
-                  <LogOut className="w-4 h-4" />
-                  Выйти из Саваны
-                </button>
-              </div>
-            </motion.div>
-          </div>
+          <UserProfileModal user={profile} onClose={() => setIsProfileOpen(false)} />
         )}
       </AnimatePresence>
 
@@ -327,12 +269,22 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
             <span className="text-[10px] uppercase tracking-tighter text-[var(--c-leaf)] font-bold opacity-60">Статус: В сети</span>
           </div>
         </button>
-        <button 
-          onClick={() => setIsSearching(true)}
-          className="w-10 h-10 rounded-full glass flex items-center justify-center text-white/40 hover:text-[var(--c-leaf)] transition-all"
-        >
-          <Search className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="w-10 h-10 rounded-full glass flex items-center justify-center text-white/40 hover:text-[var(--c-leaf)] transition-all"
+            title="Настройки"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <button 
+            onClick={() => setIsSearching(true)}
+            className="w-10 h-10 rounded-full glass flex items-center justify-center text-white/40 hover:text-[var(--c-leaf)] transition-all"
+            title="Поиск"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Search Bar */}

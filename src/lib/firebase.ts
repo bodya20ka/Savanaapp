@@ -6,7 +6,9 @@ import {
   onAuthStateChanged, 
   User as FirebaseUser,
   setPersistence,
-  browserLocalPersistence
+  browserLocalPersistence,
+  updateProfile as updateProfileInAuth,
+  updatePassword as updatePasswordInAuth
 } from 'firebase/auth';
 import { getFirestore, collection, doc, setDoc, getDoc, serverTimestamp, query, where, orderBy, limit, onSnapshot, addDoc, updateDoc, increment, arrayUnion, arrayRemove } from 'firebase/firestore';
 import firebaseConfig from '@/firebase-applet-config.json';
@@ -93,6 +95,8 @@ export interface FirestoreErrorInfo {
     isAnonymous?: boolean | null;
   }
 }
+
+export { updateProfileInAuth, updatePasswordInAuth };
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
