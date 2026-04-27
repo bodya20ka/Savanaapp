@@ -63,9 +63,10 @@ function cn(...inputs: ClassValue[]) {
 interface SidebarProps {
   onSelectRoom: (roomId: string) => void;
   selectedRoomId?: string;
+  onViewProfile: (profile: any) => void;
 }
 
-export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) {
+export default function Sidebar({ onSelectRoom, selectedRoomId, onViewProfile }: SidebarProps) {
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<UserProfile[]>([]);
@@ -141,7 +142,6 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
   };
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [activeFilter, setActiveFilter] = useState<'all' | 'group' | 'private'>('all');
 
@@ -192,7 +192,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
         {/* Header */}
         <div className="p-6 border-bottom border-white/5 flex items-center justify-between">
           <button 
-            onClick={() => setIsProfileOpen(true)}
+            onClick={() => profile && onViewProfile(profile)}
             className="flex items-center gap-3 group text-left"
           >
             <div className="w-10 h-10 rounded-xl bg-[var(--c-leaf)]/20 flex items-center justify-center overflow-hidden transition-transform group-hover:scale-105 text-xl">
@@ -349,7 +349,6 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
         </div>
       </div>
 
-      {/* Modals outside the Sidebar's clipping div */}
       <AnimatePresence>
         {isCreatingRoom && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
@@ -403,12 +402,6 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
       <AnimatePresence>
         {isSettingsOpen && profile && (
           <SettingsModal profile={profile} onClose={() => setIsSettingsOpen(false)} />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {isProfileOpen && profile && (
-          <UserProfileModal user={profile} onClose={() => setIsProfileOpen(false)} />
         )}
       </AnimatePresence>
     </>

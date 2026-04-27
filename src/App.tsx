@@ -12,6 +12,7 @@ export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedRoomId, setSelectedRoomId] = useState<string | undefined>();
+  const [viewingProfile, setViewingProfile] = useState<any>(null);
 
   useEffect(() => {
     // Test connection to prevent Firebase errors on startup
@@ -52,11 +53,12 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-[100dvh] bg-[var(--c-jungle-900)] text-[var(--c-mist)] overflow-hidden font-sans">
+    <div className="flex h-[100dvh] bg-[var(--c-jungle-900)] text-[var(--c-mist)] overflow-hidden font-sans relative">
       {/* Sidebar */}
       <Sidebar 
         onSelectRoom={setSelectedRoomId} 
         selectedRoomId={selectedRoomId} 
+        onViewProfile={setViewingProfile}
       />
 
       {/* Main Content Area */}
@@ -71,7 +73,10 @@ export default function App() {
               transition={{ duration: 0.3 }}
               className="flex-1 h-full"
             >
-              <ChatWindow roomId={selectedRoomId} />
+              <ChatWindow 
+                roomId={selectedRoomId} 
+                onViewProfile={setViewingProfile}
+              />
             </motion.div>
           ) : (
             <motion.div 
@@ -99,6 +104,16 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+
+      {/* Global Modals to prevent clipping */}
+      <AnimatePresence>
+        {viewingProfile && (
+          <UserProfileModal 
+            user={viewingProfile} 
+            onClose={() => setViewingProfile(null)} 
+          />
+        )}
+      </AnimatePresence>
 
       {/* Atmospheric overlays */}
       <div className="fixed top-0 right-0 w-[50vw] h-[50vh] bg-[var(--c-leaf)]/5 blur-[120px] rounded-full pointer-events-none -z-10" />

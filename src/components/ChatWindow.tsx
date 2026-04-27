@@ -59,9 +59,10 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 interface ChatWindowProps {
   roomId: string;
+  onViewProfile: (profile: any) => void;
 }
 
-export default function ChatWindow({ roomId }: ChatWindowProps) {
+export default function ChatWindow({ roomId, onViewProfile }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [room, setRoom] = useState<ChatRoom | null>(null);
   const [input, setInput] = useState('');
@@ -71,7 +72,6 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
   const [showGameSelection, setShowGameSelection] = useState(false);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [forwardingMsg, setForwardingMsg] = useState<Message | null>(null);
-  const [showProfile, setShowProfile] = useState<any>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -247,7 +247,7 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
     try {
       const userDoc = await getDoc(doc(db, 'users', uid));
       if (userDoc.exists()) {
-        setShowProfile({ uid: userDoc.id, ...userDoc.data() });
+        onViewProfile({ uid: userDoc.id, ...userDoc.data() });
       }
     } catch (err) {
       console.error('Error fetching profile:', err);
@@ -555,13 +555,6 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
           messageId={activeGame.id} 
           chatId={roomId}
           onClose={() => setActiveGame(null)} 
-        />
-      )}
-
-      {showProfile && (
-        <UserProfileModal 
-          user={showProfile} 
-          onClose={() => setShowProfile(null)} 
         />
       )}
 

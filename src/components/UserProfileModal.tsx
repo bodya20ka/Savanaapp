@@ -19,30 +19,28 @@ interface UserProfileModalProps {
 
 export default function UserProfileModal({ user, onClose }: UserProfileModalProps) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
       <motion.div 
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/80 backdrop-blur-md cursor-pointer"
       />
       
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="glass p-8 rounded-[2.5rem] w-full max-w-md relative z-10 shadow-2xl overflow-hidden"
+        className="glass p-8 rounded-[2.5rem] w-full max-w-md relative z-[10000] shadow-2xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
       >
         <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          className="absolute top-6 right-6 w-10 h-10 glass rounded-full flex items-center justify-center hover:bg-white/30 transition-all z-[30] cursor-pointer"
+          onClick={onClose}
+          className="absolute top-6 right-6 w-10 h-10 glass rounded-full flex items-center justify-center hover:bg-white/40 transition-all z-[10001] cursor-pointer group"
           title="Закрыть"
         >
-          <X className="w-6 h-6 text-white" />
+          <X className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
         </button>
 
         {/* Decorative background */}
@@ -80,9 +78,9 @@ export default function UserProfileModal({ user, onClose }: UserProfileModalProp
                   <div className="w-10 h-10 rounded-2xl bg-white/5 flex items-center justify-center shrink-0">
                     <User className="w-5 h-5 opacity-40" />
                   </div>
-                  <div>
+                  <div className="min-w-0 flex-1">
                     <span className="text-[10px] uppercase tracking-widest font-bold opacity-30 block mb-1">Био</span>
-                    <p className="text-sm text-[var(--c-mist)]/70 leading-relaxed">
+                    <p className="text-sm text-[var(--c-mist)]/70 leading-relaxed break-words">
                       {user.bio || 'Этот житель Саваны предпочитает сохранять тайну своего прошлого.'}
                     </p>
                   </div>
