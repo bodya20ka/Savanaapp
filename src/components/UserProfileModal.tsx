@@ -19,33 +19,36 @@ interface UserProfileModalProps {
 
 export default function UserProfileModal({ user, onClose }: UserProfileModalProps) {
   return (
-    <AnimatePresence>
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        />
-        
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="glass p-8 rounded-[2.5rem] w-full max-w-md relative z-10 shadow-2xl overflow-hidden"
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+      />
+      
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="glass p-8 rounded-[2.5rem] w-full max-w-md relative z-10 shadow-2xl overflow-hidden"
+      >
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          className="absolute top-6 right-6 w-10 h-10 glass rounded-full flex items-center justify-center hover:bg-white/30 transition-all z-[30] cursor-pointer"
+          title="Закрыть"
         >
-          {/* Decorative background */}
-          <div className="absolute top-0 left-0 w-full h-32 bg-[var(--c-leaf)]/10" />
-          
-          <button 
-            onClick={onClose}
-            className="absolute top-6 right-6 w-10 h-10 glass rounded-full flex items-center justify-center hover:bg-white/10 transition-all"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <X className="w-6 h-6 text-white" />
+        </button>
 
-          <div className="relative pt-12 flex flex-col items-center text-center">
+        {/* Decorative background */}
+        <div className="absolute top-0 left-0 w-full h-32 bg-[var(--c-leaf)]/10 z-0" />
+
+        <div className="relative pt-12 flex flex-col items-center text-center">
             <div className="w-32 h-32 rounded-[2rem] bg-[var(--c-moss)] overflow-hidden shadow-2xl mb-6 ring-4 ring-white/5">
               {user.photoURL ? (
                 <img src={user.photoURL} alt={user.displayName} className="w-full h-full object-cover" />
@@ -114,6 +117,5 @@ export default function UserProfileModal({ user, onClose }: UserProfileModalProp
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
   );
 }

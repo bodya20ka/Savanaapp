@@ -132,26 +132,38 @@ export default function SettingsModal({ profile, onClose }: SettingsModalProps) 
           {activeTab === 'profile' ? (
             <div className="space-y-6">
               {/* Photo Section */}
-              <div className="flex flex-col items-center gap-4">
-                <div className="w-24 h-24 rounded-3xl bg-[var(--c-bark)] overflow-hidden shadow-xl relative group">
-                  {photoURL ? (
-                    <img src={photoURL} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl">🦁</div>
-                  )}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Camera className="w-6 h-6" />
+              <div className="flex flex-col items-center gap-6">
+                <div className="relative group">
+                  <div className="w-32 h-32 rounded-3xl bg-[var(--c-bark)] overflow-hidden shadow-2xl relative border-4 border-white/5 transition-transform group-hover:scale-105">
+                    {photoURL ? (
+                      <img src={photoURL} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-5xl">🦁</div>
+                    )}
+                    <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center cursor-pointer">
+                      <Camera className="w-8 h-8 mb-2" />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Изменить</span>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              setPhotoURL(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                      />
+                    </label>
                   </div>
                 </div>
-                <div className="w-full">
-                  <label className="text-[10px] uppercase tracking-widest text-white/30 font-bold block mb-2 px-2">URL Фото</label>
-                  <input 
-                    type="text"
-                    value={photoURL}
-                    onChange={(e) => setPhotoURL(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full bg-white/5 border border-white/5 rounded-2xl py-3 px-4 text-sm focus:outline-none focus:border-[var(--c-leaf)]/50 transition-all"
-                  />
+                <div className="text-center">
+                  <p className="text-xs text-white/30 font-bold uppercase tracking-widest mb-1">Нажмите на фото</p>
+                  <p className="text-[10px] text-[var(--c-leaf)]/60 font-bold uppercase tracking-tighter">чтобы выбрать файл из галереи</p>
                 </div>
               </div>
 
