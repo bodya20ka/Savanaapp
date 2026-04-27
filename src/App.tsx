@@ -83,9 +83,9 @@ export default function App() {
                 <div className="absolute inset-0 bg-[var(--c-leaf)]/5 blur-2xl rounded-full animate-pulse" />
                 <div className="text-8xl opacity-20 relative z-10">🦁</div>
               </div>
-              <h2 className="text-4xl font-display font-bold mb-4 tracking-tight">Савана ждет тебя</h2>
+              <h2 className="text-4xl font-display font-bold mb-4 tracking-tight">Мессенджер готов к общению</h2>
               <p className="max-w-md text-lg text-[var(--c-mist)]/40 leading-relaxed italic">
-                В экосистеме общения каждый голос — это сердцебиение. Выбери группу, чтобы начать свой путь.
+                В этой системе общения каждый голос важен. Выбери группу или пользователя, чтобы начать диалог.
               </p>
               <div className="mt-12 flex gap-4">
                 <div className="px-4 py-2 glass rounded-full text-xs font-bold uppercase tracking-widest text-white/20">

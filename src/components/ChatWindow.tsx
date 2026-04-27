@@ -9,6 +9,53 @@ import CheckersGame from './CheckersGame';
 import EmojiPicker, { EmojiClickData, Theme } from 'emoji-picker-react';
 import UserProfileModal from './UserProfileModal';
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 interface ChatWindowProps {
   roomId: string;
 }
@@ -29,10 +76,14 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
   useEffect(() => {
     // Fetch room details
     const fetchRoom = async () => {
-      const docRef = doc(db, 'chats', roomId);
-      const snap = await getDoc(docRef);
-      if (snap.exists()) {
-        setRoom({ id: snap.id, ...snap.data() } as ChatRoom);
+      try {
+        const docRef = doc(db, 'chats', roomId);
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          setRoom({ id: snap.id, ...snap.data() } as ChatRoom);
+        }
+      } catch (err) {
+        handleFirestoreError(err, OperationType.GET, `chats/${roomId}`);
       }
     };
     fetchRoom();
@@ -46,6 +97,8 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
       const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
       setMessages(msgs);
       setTimeout(() => scrollToBottom(), 100);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, `chats/${roomId}/messages`);
     });
 
     return () => unsubscribe();
@@ -63,9 +116,13 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
     const msg = messages.find(m => m.id === msgId);
     const hasReacted = msg?.reactions?.[emoji]?.includes(auth.currentUser.uid);
 
-    await updateDoc(msgRef, {
-      [`reactions.${emoji}`]: hasReacted ? arrayRemove(auth.currentUser.uid) : arrayUnion(auth.currentUser.uid)
-    });
+    try {
+      await updateDoc(msgRef, {
+        [`reactions.${emoji}`]: hasReacted ? arrayRemove(auth.currentUser.uid) : arrayUnion(auth.currentUser.uid)
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `chats/${roomId}/messages/${msgId}`);
+    }
   };
 
   const handleSend = async (e?: React.FormEvent) => {
@@ -84,16 +141,20 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
       type: 'text'
     };
 
-    await addDoc(collection(db, 'chats', roomId, 'messages'), msgData);
+    try {
+      await addDoc(collection(db, 'chats', roomId, 'messages'), msgData);
 
-    // Update room last activity and last message for preview
-    await updateDoc(doc(db, 'chats', roomId), {
-      lastActivity: serverTimestamp(),
-      lastMessage: {
-        ...msgData,
-        createdAt: new Date().toISOString() // Fallback to now for immediate preview
-      }
-    });
+      // Update room last activity and last message for preview
+      await updateDoc(doc(db, 'chats', roomId), {
+        lastActivity: serverTimestamp(),
+        lastMessage: {
+          ...msgData,
+          createdAt: new Date().toISOString() // Fallback to now for immediate preview
+        }
+      });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, `chats/${roomId}/messages`);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -125,8 +186,19 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
           type: 'media'
         };
 
-        await addDoc(collection(db, 'chats', roomId, 'messages'), msgData);
-        setUploading(false);
+        try {
+          await addDoc(collection(db, 'chats', roomId, 'messages'), msgData);
+          await updateDoc(doc(db, 'chats', roomId), {
+            lastActivity: serverTimestamp(),
+            lastMessage: {
+              ...msgData,
+              createdAt: new Date().toISOString()
+            }
+          });
+          setUploading(false);
+        } catch (err) {
+          handleFirestoreError(err, OperationType.WRITE, `chats/${roomId}/messages (media)`);
+        }
       };
       reader.readAsDataURL(file);
     } catch (err: any) {
@@ -189,7 +261,7 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
             </h2>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full bg-[var(--c-leaf)] animate-pulse" />
-              <span className="text-xs text-[var(--c-mist)]/40 uppercase tracking-widest font-semibold">Житель Саваны</span>
+              <span className="text-xs text-[var(--c-mist)]/40 uppercase tracking-widest font-semibold">Пользователь</span>
             </div>
           </div>
         </div>
@@ -362,7 +434,7 @@ export default function ChatWindow({ roomId }: ChatWindowProps) {
 
         <form 
           onSubmit={handleSend}
-          className="glass-dark p-2 rounded-[2rem] flex items-center gap-2 shadow-2xl"
+          className="bg-[var(--c-jungle-800)]/90 backdrop-blur-2xl border border-white/5 p-2 rounded-[2rem] flex items-center gap-2 shadow-2xl relative z-[60]"
         >
           <input 
             type="file"

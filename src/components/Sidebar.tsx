@@ -7,6 +7,53 @@ import { ChatRoom, UserProfile } from '@/src/types';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
@@ -35,6 +82,8 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const roomData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatRoom));
       setRooms(roomData);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'chats');
     });
 
     return () => unsubscribe();
@@ -71,18 +120,22 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
       return;
     }
 
-    const docRef = await addDoc(collection(db, 'chats'), {
-      type: 'private',
-      members: [auth.currentUser.uid, targetUser.uid],
-      createdBy: auth.currentUser.uid,
-      createdAt: serverTimestamp(),
-      lastActivity: serverTimestamp(),
-      name: `${auth.currentUser.displayName} & ${targetUser.displayName}`
-    });
+    try {
+      const docRef = await addDoc(collection(db, 'chats'), {
+        type: 'private',
+        members: [auth.currentUser.uid, targetUser.uid],
+        createdBy: auth.currentUser.uid,
+        createdAt: serverTimestamp(),
+        lastActivity: serverTimestamp(),
+        name: `${auth.currentUser.displayName} & ${targetUser.displayName}`
+      });
 
-    onSelectRoom(docRef.id);
-    setIsSearching(false);
-    setSearchQuery('');
+      onSelectRoom(docRef.id);
+      setIsSearching(false);
+      setSearchQuery('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, 'chats (private)');
+    }
   };
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -96,16 +149,22 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
       const data = snapshot.data() as UserProfile;
       setProfile(data);
       setNewBio(data?.bio || '');
+    }, (err) => {
+      handleFirestoreError(err, OperationType.GET, `users/${auth.currentUser?.uid}`);
     });
     return () => unsub();
   }, []);
 
   const updateBio = async () => {
     if (!auth.currentUser) return;
-    await updateDoc(doc(db, 'users', auth.currentUser.uid), {
-      bio: newBio
-    });
-    setIsProfileOpen(false);
+    try {
+      await updateDoc(doc(db, 'users', auth.currentUser.uid), {
+        bio: newBio
+      });
+      setIsProfileOpen(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${auth.currentUser.uid}`);
+    }
   };
 
   const filteredRooms = rooms.filter(room => {
@@ -127,14 +186,14 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
         createdBy: auth.currentUser.uid,
         createdAt: serverTimestamp(),
         lastActivity: serverTimestamp(),
-        description: 'Новая группа в Саване'
+        description: 'Новая группа'
       });
 
       onSelectRoom(docRef.id);
       setIsCreatingRoom(false);
       setNewRoomName('');
     } catch (error) {
-      console.error('Error creating group:', error);
+      handleFirestoreError(error, OperationType.CREATE, 'chats (group)');
     }
   };
 
@@ -246,7 +305,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
                   className="w-full py-4 bg-white/5 hover:bg-red-500/10 text-red-400 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all"
                 >
                   <LogOut className="w-4 h-4" />
-                  Выйти из Саваны
+                  Выйти из системы
                 </button>
               </div>
             </motion.div>
@@ -285,7 +344,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             onFocus={() => setIsSearching(true)}
-            placeholder="Поиск жителей..."
+            placeholder="Поиск пользователей..."
             className="w-full bg-white/5 border border-white/5 rounded-2xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:border-[var(--c-leaf)]/50 transition-all"
           />
           {isSearching && (
@@ -325,7 +384,7 @@ export default function Sidebar({ onSelectRoom, selectedRoomId }: SidebarProps) 
                   </div>
                 </button>
               )) : (
-                <div className="p-4 text-center text-sm opacity-40">Жители не найдены</div>
+                <div className="p-4 text-center text-sm opacity-40">Пользователи не найдены</div>
               )}
             </motion.div>
           )}

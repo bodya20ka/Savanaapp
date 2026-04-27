@@ -79,7 +79,7 @@ export default function UserProfileModal({ user, onClose }: UserProfileModalProp
                   <div>
                     <span className="text-[10px] uppercase tracking-widest font-bold opacity-30 block mb-1">Био</span>
                     <p className="text-sm text-[var(--c-mist)]/70 leading-relaxed">
-                      {user.bio || 'Этот житель Саваны предпочитает сохранять тайну своего прошлого.'}
+                      {user.bio || 'Этот пользователь предпочитает сохранять тайну своего прошлого.'}
                     </p>
                   </div>
                 </div>
